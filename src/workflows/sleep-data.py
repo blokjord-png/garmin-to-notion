@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, date, timedelta
+from time import sleep
 
 import pytz
 from dotenv import load_dotenv, dotenv_values
@@ -6,16 +7,21 @@ from dotenv import load_dotenv, dotenv_values
 from src.helpers import get_garmin_client, get_notion_client
 
 # Constants
-local_tz = pytz.timezone("America/Toronto")
+local_tz = pytz.timezone("Europe/Brussels")
 
 # Load environment variables
 load_dotenv()
 CONFIG = dotenv_values()
 
 
-def get_sleep_data(garmin):
-    today = datetime.today().date()
-    return garmin.get_sleep_data(today.isoformat())
+def get_sleep_data_for_date(garmin, target_date):
+    return garmin.get_sleep_data(target_date.isoformat())
+
+
+def get_sleep_dates(days_back=500):
+    startdate = date.today() - timedelta(days=days_back)
+    return [startdate + timedelta(days=x)
+            for x in range((date.today() - startdate).days + 1)]
 
 
 def format_duration(seconds):
@@ -91,18 +97,27 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
 def main():
     load_dotenv()
 
-    # Initialize Garmin and Notion clients using environment variables
     garmin_client, _ = get_garmin_client()
     notion_client, notion_dbs = get_notion_client()
 
     database_id = notion_dbs.sleep
 
-    data = get_sleep_data(garmin_client)
-    if data:
-        sleep_date = data.get('dailySleepDTO', {}).get('calendarDate')
-        if sleep_date and not sleep_data_exists(notion_client, database_id, sleep_date):
-            create_sleep_data(notion_client, database_id, data, skip_zero_sleep=True)
+    sleep_dates = get_sleep_dates(days_back=180)
 
+    for d in sleep_dates:
+        print(f"Checking sleep data for {d.isoformat()}")
+
+        data = get_sleep_data_for_date(garmin_client, d)
+
+        if data:
+            sleep_date = data.get('dailySleepDTO', {}).get('calendarDate')
+
+            if sleep_date and not sleep_data_exists(notion_client, database_id, sleep_date):
+                create_sleep_data(notion_client, database_id, data, skip_zero_sleep=True)
+            else:
+                print(f"Sleep data already exists or no valid sleep date for {d.isoformat()}")
+
+        sleep(0.5)
 
 if __name__ == '__main__':
     main()
