@@ -2,26 +2,37 @@ name: Sync Garmin to Notion
 
 on:
   schedule:
-    - cron: '0 1 * * *' # Daily
+    - cron: '0 1 * * *' # Dagelijks om 01.00 uur Belgische tijd
+      timezone: 'Europe/Brussels'
+
   workflow_dispatch:
     inputs:
       GARMIN_ACTIVITIES_FETCH_LIMIT:
         type: number
         default: 10
+
 env:
-  TZ: 'America/Toronto'
+  TZ: 'Europe/Brussels'
+
+concurrency:
+  group: garmin-to-notion
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --upgrade-package garminconnect
 
       - name: Run script
         env:
@@ -32,7 +43,8 @@ jobs:
           NOTION_STEPS_DB_ID: ${{ secrets.NOTION_STEPS_DB_ID }}
           NOTION_SLEEP_DB_ID: ${{ secrets.NOTION_SLEEP_DB_ID }}
           GARMIN_ACTIVITIES_FETCH_LIMIT: ${{ inputs.GARMIN_ACTIVITIES_FETCH_LIMIT || '10' }}
-          TZ: 'America/Toronto'
+          TZ: 'Europe/Brussels'
+
         run: |
           uv run python -m src.workflows.garmin-activities
           uv run python -m src.workflows.personal-records
