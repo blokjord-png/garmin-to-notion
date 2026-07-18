@@ -1,6 +1,12 @@
 name: Sync Garmin to Notion
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/workflows/sleep-data.py'
+
   schedule:
     - cron: '0 1 * * *' # Dagelijks om 01.00 uur Belgische tijd
       timezone: 'Europe/Brussels'
@@ -10,6 +16,10 @@ on:
       GARMIN_ACTIVITIES_FETCH_LIMIT:
         type: number
         default: 10
+      GARMIN_SLEEP_DAYS_BACK:
+        description: Number of sleep dates to check and backfill
+        type: number
+        default: 500
 
 env:
   TZ: 'Europe/Brussels'
@@ -43,10 +53,15 @@ jobs:
           NOTION_STEPS_DB_ID: ${{ secrets.NOTION_STEPS_DB_ID }}
           NOTION_SLEEP_DB_ID: ${{ secrets.NOTION_SLEEP_DB_ID }}
           GARMIN_ACTIVITIES_FETCH_LIMIT: ${{ inputs.GARMIN_ACTIVITIES_FETCH_LIMIT || '10' }}
+          GARMIN_SLEEP_DAYS_BACK: ${{ github.event_name == 'push' && '500' || inputs.GARMIN_SLEEP_DAYS_BACK || '30' }}
           TZ: 'Europe/Brussels'
 
         run: |
-          uv run python -m src.workflows.garmin-activities
-          uv run python -m src.workflows.personal-records
-          uv run python -m src.workflows.daily-steps
-          uv run python -m src.workflows.sleep-data
+          if [ "${{ github.event_name }}" = "push" ]; then
+            uv run python -m src.workflows.sleep-data
+          else
+            uv run python -m src.workflows.garmin-activities
+            uv run python -m src.workflows.personal-records
+            uv run python -m src.workflows.daily-steps
+            uv run python -m src.workflows.sleep-data
+          fi
