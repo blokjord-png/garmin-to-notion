@@ -2,7 +2,7 @@ name: Sync Garmin to Notion
 
 on:
   schedule:
-    - cron: '0 1 * * *' # Dagelijks om 01.00 uur Belgische tijd
+    - cron: '0 10 * * *' # Dagelijks om 10.00 uur Belgische tijd
       timezone: 'Europe/Brussels'
 
   workflow_dispatch:
