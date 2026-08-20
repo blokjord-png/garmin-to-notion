@@ -17,6 +17,7 @@ on:
 
 env:
   TZ: 'Europe/Brussels'
+  GARMIN_TOKENSTORE_DIR: .garmin_tokenstore
 
 concurrency:
   group: garmin-to-notion
@@ -38,9 +39,29 @@ jobs:
       - name: Install dependencies
         run: uv sync --upgrade-package garminconnect
 
+      # De Garmin-sessie wordt tijdens de run ververst/vernieuwd. Die
+      # vernieuwde sessie hier cachen zorgt dat de volgende run daarmee
+      # verdergaat, in plaats van steeds hetzelfde (mogelijk verlopen) token
+      # uit GARMIN_AUTH_TOKEN opnieuw te proberen. Bij een cache-miss (eerste
+      # run, of cache verlopen na >7 dagen zonder run) valt het script terug
+      # op GARMIN_AUTH_TOKEN om de cache opnieuw te vullen.
+      - name: Restore cached Garmin session
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.GARMIN_TOKENSTORE_DIR }}
+          key: garmin-tokenstore-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            garmin-tokenstore-
+
       - name: Run script
         env:
           GARMIN_AUTH_TOKEN: ${{ secrets.GARMIN_AUTH_TOKEN }}
+          # Optioneel: alleen als je deze secrets zelf hebt toegevoegd. Zonder
+          # geeft het script gewoon de oude 401-fout als de sessie ooit
+          # volledig ongeldig wordt gemaakt door Garmin, en moet je opnieuw
+          # eenmalig een token genereren (zie README_AUTH_SETUP.md).
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
           NOTION_PR_DB_ID: ${{ secrets.NOTION_PR_DB_ID }}
@@ -55,3 +76,12 @@ jobs:
           uv run python -m src.workflows.personal-records
           uv run python -m src.workflows.daily-steps
           uv run python -m src.workflows.sleep-data
+
+      # Altijd opslaan, ook als een van de scripts hierboven faalt: zo gaat
+      # een sessie die halverwege al ververst was niet verloren.
+      - name: Save refreshed Garmin session
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.GARMIN_TOKENSTORE_DIR }}
+          key: garmin-tokenstore-${{ github.run_id }}-${{ github.run_attempt }}
